@@ -1,0 +1,7 @@
+{
+  "name": "IMEI Device Finder",
+  "description": "A secure utility to register and locate devices using their unique IMEI identifiers.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
