@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
+  Routes, 
+  Route, 
+  Link, 
+  useNavigate, 
+  useLocation 
+} from 'react-router-dom';
+import { 
   Search, 
   Smartphone, 
   MapPin, 
@@ -48,6 +55,50 @@ function ChangeView({ center, zoom }: { center: [number, number], zoom: number }
   return null;
 }
 
+// Component to center map on user's location
+function CenterOnUser() {
+  const map = useMap();
+  const [locating, setLocating] = useState(false);
+
+  const handleCenter = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+        setLocating(false);
+      },
+      (err) => {
+        console.error("Error getting location:", err);
+        setLocating(false);
+        alert("Could not get your location. Please check permissions.");
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
+  return (
+    <div className="leaflet-top leaflet-right mt-4 mr-4 z-[1000]">
+      <div className="leaflet-control">
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCenter(); }}
+          className="bg-white p-3 rounded-2xl shadow-xl border border-slate-100 hover:bg-slate-50 transition-all active:scale-95 group flex items-center justify-center"
+          title="Center on my location"
+        >
+          {locating ? (
+            <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+          ) : (
+            <Navigation className="w-5 h-5 text-indigo-600 group-hover:rotate-12 transition-transform" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface DeviceLocation {
   latitude: number;
   longitude: number;
@@ -63,7 +114,10 @@ interface DeviceInfo {
 }
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'register' | 'manage' | 'tracker'>('home');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const view = location.pathname.split('/')[1] || 'home';
+
   const [imeiInput, setImeiInput] = useState('');
   const [searchResult, setSearchResult] = useState<{ device: DeviceInfo; location: DeviceLocation | null } | null>(null);
   const [locationHistory, setLocationHistory] = useState<DeviceLocation[]>([]);
@@ -288,7 +342,7 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
           <div 
             className="flex items-center gap-3 cursor-pointer group" 
-            onClick={() => setView('home')}
+            onClick={() => navigate('/')}
           >
             <div className="bg-indigo-600 p-2.5 rounded-2xl shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform duration-300">
               <Smartphone className="text-white w-6 h-6" />
@@ -299,46 +353,47 @@ export default function App() {
             </div>
           </div>
           
-          <nav className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-2xl border border-slate-200/50">
-            <button 
-              onClick={() => setView('home')}
+            <nav className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-2xl border border-slate-200/50">
+            <Link 
+              to="/"
               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'home' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
             >
               Find
-            </button>
-            <button 
-              onClick={() => setView('register')}
+            </Link>
+            <Link 
+              to="/register"
               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'register' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
             >
               Register
-            </button>
-            <button 
-              onClick={() => setView('manage')}
+            </Link>
+            <Link 
+              to="/manage"
               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'manage' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
             >
               Manage
-            </button>
-            <button 
-              onClick={() => setView('tracker')}
+            </Link>
+            <Link 
+              to="/tracker"
               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'tracker' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
             >
               Tracker
-            </button>
+            </Link>
           </nav>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 pt-32 pb-24">
+      <main className="max-w-6xl mx-auto pt-32 pb-24">
         <AnimatePresence mode="wait">
-          {view === 'home' && (
-            <motion.div 
-              key="home"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="space-y-12"
-            >
+          <Routes location={location}>
+            <Route path="/" element={
+              <motion.div 
+                key="home"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -30 }}
+                transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+                className="space-y-12"
+              >
               {/* Hero */}
               <div className="text-center space-y-6 max-w-3xl mx-auto">
                 <motion.div
@@ -423,7 +478,13 @@ export default function App() {
                     <div className="bg-red-100 p-2 rounded-xl">
                       <AlertCircle className="w-5 h-5" />
                     </div>
-                    <span className="text-sm font-bold">{error}</span>
+                    <span className="text-sm font-bold flex-1">{error}</span>
+                    <button 
+                      onClick={() => setError(null)}
+                      className="p-1 hover:bg-red-200/50 rounded-lg transition-colors text-red-400 hover:text-red-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </motion.div>
                 )}
               </div>
@@ -464,7 +525,9 @@ export default function App() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-0.5">IMEI ID</p>
-                            <p className="font-mono font-bold text-indigo-600 truncate">*{searchResult.device.imei.slice(-6)}</p>
+                            <p className="font-mono font-bold text-indigo-600 truncate bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 ring-2 ring-indigo-500/20">
+                              {searchResult.device.imei}
+                            </p>
                           </div>
                         </div>
                         {searchResult.device.model && (
@@ -525,6 +588,39 @@ export default function App() {
                       </div>
 
                       <button 
+                        onClick={() => {
+                          const mapElement = document.getElementById('device-map');
+                          if (mapElement) mapElement.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="w-full bg-white border-2 border-indigo-100 text-indigo-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-indigo-50 transition-all"
+                      >
+                        <MapPin className="w-5 h-5" />
+                        View on Map
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          const mapElement = document.getElementById('device-map');
+                          if (mapElement) mapElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                        className="w-full bg-white border-2 border-indigo-100 text-indigo-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-indigo-50 transition-all active:scale-95"
+                      >
+                        <MapPin className="w-5 h-5" />
+                        View on Map
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          const mapElement = document.getElementById('device-map');
+                          if (mapElement) mapElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }}
+                        className="w-full bg-white border-2 border-indigo-100 text-indigo-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-indigo-50 transition-all active:scale-95"
+                      >
+                        <MapPin className="w-5 h-5" />
+                        View on Map
+                      </button>
+
+                      <button 
                         onClick={() => window.open(`https://www.google.com/maps?q=${searchResult.location?.latitude},${searchResult.location?.longitude}`, '_blank')}
                         className="w-full bg-indigo-600 text-white py-5 rounded-[2rem] font-black flex items-center justify-center gap-3 hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 group"
                       >
@@ -543,7 +639,7 @@ export default function App() {
                   </div>
 
                   {/* Map View */}
-                  <div className="lg:col-span-7 h-[500px] bg-slate-200 rounded-[3rem] overflow-hidden relative shadow-2xl shadow-slate-300/50 group">
+                  <div id="device-map" className="lg:col-span-7 h-[500px] bg-slate-200 rounded-[3rem] overflow-hidden relative shadow-2xl shadow-slate-300/50 group">
                     {searchResult.location ? (
                       <div className="w-full h-full relative">
                         <MapContainer 
@@ -557,6 +653,7 @@ export default function App() {
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                           />
+                          <CenterOnUser />
                           
                           {showHistory && locationHistory.length > 1 && (
                             <Polyline 
@@ -654,16 +751,15 @@ export default function App() {
                 </div>
               )}
             </motion.div>
-          )}
-
-          {view === 'register' && (
-            <motion.div 
-              key="register"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="max-w-4xl mx-auto grid md:grid-cols-2 gap-12 items-center"
-            >
+            } />
+            <Route path="/register" element={
+              <motion.div 
+                key="register"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="max-w-4xl mx-auto grid md:grid-cols-2 gap-12 items-center"
+              >
               <div className="space-y-8">
                 <div className="space-y-4">
                   <h2 className="text-5xl font-black text-slate-900 tracking-tight">Protect your <span className="text-indigo-600">Identity.</span></h2>
@@ -795,22 +891,27 @@ export default function App() {
                       <div className="bg-emerald-100 p-2 rounded-xl">
                         <CheckCircle2 className="w-5 h-5" />
                       </div>
-                      <span className="text-sm font-black">{success}</span>
+                      <span className="text-sm font-black flex-1">{success}</span>
+                      <button 
+                        onClick={() => setSuccess(null)}
+                        className="p-1 hover:bg-emerald-200/50 rounded-lg transition-colors text-emerald-600/60 hover:text-emerald-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
             </motion.div>
-          )}
-
-          {view === 'manage' && (
-            <motion.div 
-              key="manage"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              className="space-y-12"
-            >
+            } />
+            <Route path="/manage" element={
+              <motion.div 
+                key="manage"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -30 }}
+                className="space-y-12"
+              >
               <div className="text-center space-y-4 max-w-2xl mx-auto">
                 <h2 className="text-4xl font-black text-slate-900">Device Management</h2>
                 <p className="text-slate-500 font-medium">View and manage all devices registered to your recovery network.</p>
@@ -858,7 +959,7 @@ export default function App() {
                         </div>
 
                         <button 
-                          onClick={() => { setImeiInput(device.imei); setView('home'); handleFind(undefined, device.imei); }}
+                          onClick={() => { setImeiInput(device.imei); navigate('/'); handleFind(undefined, device.imei); }}
                           className="w-full mt-4 bg-slate-900 text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all active:scale-95"
                         >
                           <Search className="w-4 h-4" />
@@ -877,7 +978,7 @@ export default function App() {
                       <p className="text-slate-300 text-sm">Register your first device to start tracking.</p>
                     </div>
                     <button 
-                      onClick={() => setView('register')}
+                      onClick={() => navigate('/register')}
                       className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all"
                     >
                       Register Device
@@ -886,16 +987,15 @@ export default function App() {
                 )}
               </div>
             </motion.div>
-          )}
-
-          {view === 'tracker' && (
-            <motion.div 
-              key="tracker"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              className="space-y-8"
-            >
+            } />
+            <Route path="/tracker" element={
+              <motion.div 
+                key="tracker"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -30 }}
+                className="space-y-8"
+              >
               <div className="text-center space-y-4 max-w-2xl mx-auto">
                 <h2 className="text-4xl font-black text-slate-900">Live GPS Tracker</h2>
                 <p className="text-slate-500 font-medium">Real-time overview of all devices in your network.</p>
@@ -912,6 +1012,7 @@ export default function App() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
+                  <CenterOnUser />
                   {devicesWithLocations.map((device) => (
                     device.location && (
                       <Marker 
@@ -932,8 +1033,8 @@ export default function App() {
                                 <span>{new Date(device.location.timestamp).toLocaleTimeString()}</span>
                               </p>
                             </div>
-                            <button 
-                              onClick={() => { setImeiInput(device.imei); setView('home'); handleFind(undefined, device.imei); }}
+                        <button 
+                              onClick={() => { setImeiInput(device.imei); navigate('/'); handleFind(undefined, device.imei); }}
                               className="w-full mt-3 bg-indigo-600 text-white py-2 rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-all"
                             >
                               Detailed View
@@ -973,7 +1074,8 @@ export default function App() {
                 ))}
               </div>
             </motion.div>
-          )}
+            } />
+          </Routes>
         </AnimatePresence>
       </main>
 
