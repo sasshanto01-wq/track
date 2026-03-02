@@ -63,7 +63,7 @@ interface DeviceInfo {
 }
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'register' | 'manage'>('home');
+  const [view, setView] = useState<'home' | 'register' | 'manage' | 'tracker'>('home');
   const [imeiInput, setImeiInput] = useState('');
   const [searchResult, setSearchResult] = useState<{ device: DeviceInfo; location: DeviceLocation | null } | null>(null);
   const [locationHistory, setLocationHistory] = useState<DeviceLocation[]>([]);
@@ -73,6 +73,7 @@ export default function App() {
   const [success, setSuccess] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [allDevices, setAllDevices] = useState<DeviceInfo[]>([]);
+  const [devicesWithLocations, setDevicesWithLocations] = useState<(DeviceInfo & { location: DeviceLocation | null })[]>([]);
 
   // Registration state
   const [regName, setRegName] = useState('');
@@ -88,9 +89,24 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setAllDevices(data);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Server error fetching devices:", res.status, errorData);
       }
     } catch (err) {
-      console.error("Failed to fetch devices");
+      console.error("Network error fetching devices:", err);
+    }
+  };
+
+  const fetchDevicesWithLocations = async () => {
+    try {
+      const res = await fetch('/api/devices-with-locations');
+      if (res.ok) {
+        const data = await res.json();
+        setDevicesWithLocations(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch devices with locations");
     }
   };
 
@@ -98,10 +114,20 @@ export default function App() {
     const saved = localStorage.getItem('recent_searches');
     if (saved) setRecentSearches(JSON.parse(saved));
     fetchDevices();
+    fetchDevicesWithLocations();
   }, []);
 
   useEffect(() => {
     if (view === 'manage') fetchDevices();
+    if (view === 'tracker') fetchDevicesWithLocations();
+  }, [view]);
+
+  useEffect(() => {
+    let interval: number;
+    if (view === 'tracker') {
+      interval = window.setInterval(fetchDevicesWithLocations, 10000);
+    }
+    return () => clearInterval(interval);
   }, [view]);
 
   const saveSearch = (imei: string) => {
@@ -271,6 +297,12 @@ export default function App() {
               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'manage' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
             >
               Manage
+            </button>
+            <button 
+              onClick={() => setView('tracker')}
+              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${view === 'tracker' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              Tracker
             </button>
           </nav>
         </div>
@@ -832,6 +864,93 @@ export default function App() {
                     </button>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          )}
+
+          {view === 'tracker' && (
+            <motion.div 
+              key="tracker"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+              className="space-y-8"
+            >
+              <div className="text-center space-y-4 max-w-2xl mx-auto">
+                <h2 className="text-4xl font-black text-slate-900">Live GPS Tracker</h2>
+                <p className="text-slate-500 font-medium">Real-time overview of all devices in your network.</p>
+              </div>
+
+              <div className="h-[600px] bg-slate-200 rounded-[3rem] overflow-hidden relative shadow-2xl shadow-slate-300/50">
+                <MapContainer 
+                  center={[20, 0]} 
+                  zoom={2} 
+                  scrollWheelZoom={true}
+                  className="w-full h-full"
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {devicesWithLocations.map((device) => (
+                    device.location && (
+                      <Marker 
+                        key={device.imei} 
+                        position={[device.location.latitude, device.location.longitude]}
+                      >
+                        <Popup>
+                          <div className="p-2 min-w-[150px]">
+                            <h4 className="font-black text-slate-900 mb-1">{device.name}</h4>
+                            <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-2">{device.model || 'Unknown Model'}</p>
+                            <div className="space-y-1 border-t border-slate-100 pt-2">
+                              <p className="text-[10px] text-slate-500 flex justify-between">
+                                <span>IMEI:</span>
+                                <span className="font-mono">*{device.imei.slice(-6)}</span>
+                              </p>
+                              <p className="text-[10px] text-slate-500 flex justify-between">
+                                <span>Last Seen:</span>
+                                <span>{new Date(device.location.timestamp).toLocaleTimeString()}</span>
+                              </p>
+                            </div>
+                            <button 
+                              onClick={() => { setImeiInput(device.imei); setView('home'); handleFind(undefined, device.imei); }}
+                              className="w-full mt-3 bg-indigo-600 text-white py-2 rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-all"
+                            >
+                              Detailed View
+                            </button>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    )
+                  ))}
+                </MapContainer>
+
+                {/* Legend Overlay */}
+                <div className="absolute top-6 right-6 glass p-4 rounded-2xl z-[1000] space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 bg-indigo-600 rounded-full shadow-sm shadow-indigo-200" />
+                    <span className="text-xs font-bold text-slate-700">Active Devices ({devicesWithLocations.filter(d => d.location).length})</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 bg-slate-400 rounded-full" />
+                    <span className="text-xs font-bold text-slate-400">Offline ({devicesWithLocations.filter(d => !d.location).length})</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-4 gap-4">
+                {devicesWithLocations.map((device) => (
+                  <div 
+                    key={device.imei}
+                    className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3"
+                  >
+                    <div className={`w-2 h-2 rounded-full ${device.location ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 truncate">{device.name}</p>
+                      <p className="text-[10px] text-slate-400 font-mono truncate">{device.imei}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           )}

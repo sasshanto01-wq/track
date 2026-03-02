@@ -28,6 +28,20 @@ db.exec(`
   );
 `);
 
+// Ensure columns exist (Migration)
+const tableInfo = db.prepare("PRAGMA table_info(devices)").all() as any[];
+const columns = tableInfo.map(c => c.name);
+
+if (!columns.includes('model')) {
+  db.exec("ALTER TABLE devices ADD COLUMN model TEXT");
+}
+if (!columns.includes('color')) {
+  db.exec("ALTER TABLE devices ADD COLUMN color TEXT");
+}
+if (!columns.includes('storage')) {
+  db.exec("ALTER TABLE devices ADD COLUMN storage TEXT");
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -77,6 +91,19 @@ async function startServer() {
       db.prepare("DELETE FROM locations WHERE imei = ?").run(imei);
       db.prepare("DELETE FROM devices WHERE imei = ?").run(imei);
       res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Database error" });
+    }
+  });
+
+  app.get("/api/devices-with-locations", (req, res) => {
+    try {
+      const devices = db.prepare("SELECT * FROM devices ORDER BY created_at DESC").all() as any[];
+      const devicesWithLocations = devices.map(device => {
+        const location = db.prepare("SELECT * FROM locations WHERE imei = ? ORDER BY timestamp DESC LIMIT 1").get(device.imei);
+        return { ...device, location };
+      });
+      res.json(devicesWithLocations);
     } catch (err) {
       res.status(500).json({ error: "Database error" });
     }
