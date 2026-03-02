@@ -5,49 +5,64 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database("devices.db");
+let db: Database.Database;
+try {
+  console.log("Initializing database...");
+  db = new Database("devices.db");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS devices (
+      imei TEXT PRIMARY KEY,
+      name TEXT,
+      model TEXT,
+      color TEXT,
+      storage TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
-// Initialize Database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS devices (
-    imei TEXT PRIMARY KEY,
-    name TEXT,
-    model TEXT,
-    color TEXT,
-    storage TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS locations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    imei TEXT,
-    latitude REAL,
-    longitude REAL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(imei) REFERENCES devices(imei)
-  );
-`);
-
-// Ensure columns exist (Migration)
-const tableInfo = db.prepare("PRAGMA table_info(devices)").all() as any[];
-const columns = tableInfo.map(c => c.name);
-
-if (!columns.includes('model')) {
-  db.exec("ALTER TABLE devices ADD COLUMN model TEXT");
-}
-if (!columns.includes('color')) {
-  db.exec("ALTER TABLE devices ADD COLUMN color TEXT");
-}
-if (!columns.includes('storage')) {
-  db.exec("ALTER TABLE devices ADD COLUMN storage TEXT");
+    CREATE TABLE IF NOT EXISTS locations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      imei TEXT,
+      latitude REAL,
+      longitude REAL,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(imei) REFERENCES devices(imei)
+    );
+  `);
+  console.log("Database initialized successfully.");
+} catch (err) {
+  console.error("Failed to initialize database:", err);
+  // Fallback to in-memory database if file fails
+  console.log("Falling back to in-memory database.");
+  db = new Database(":memory:");
 }
 
 async function startServer() {
+  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
   const app = express();
   app.use(express.json());
   const PORT = 3000;
 
-  // API Routes
+  try {
+    // Ensure columns exist (Migration)
+    console.log("Running database migrations...");
+    const tableInfo = db.prepare("PRAGMA table_info(devices)").all() as any[];
+    const columns = tableInfo.map(c => c.name);
+
+    if (!columns.includes('model')) {
+      db.exec("ALTER TABLE devices ADD COLUMN model TEXT");
+      console.log("Added 'model' column to devices table.");
+    }
+    if (!columns.includes('color')) {
+      db.exec("ALTER TABLE devices ADD COLUMN color TEXT");
+      console.log("Added 'color' column to devices table.");
+    }
+    if (!columns.includes('storage')) {
+      db.exec("ALTER TABLE devices ADD COLUMN storage TEXT");
+      console.log("Added 'storage' column to devices table.");
+    }
+  } catch (err) {
+    console.error("Database migration failed:", err);
+  }
   app.post("/api/register", (req, res) => {
     const { imei, name, model, color, storage } = req.body;
     if (!imei || !name) return res.status(400).json({ error: "IMEI and Name required" });

@@ -83,9 +83,29 @@ export default function App() {
   const [regStorage, setRegStorage] = useState('');
   const [isTracking, setIsTracking] = useState(false);
 
+  const fetchWithRetry = async (url: string, options?: RequestInit, retries = 3): Promise<Response> => {
+    console.log(`Fetching: ${url} (Retries left: ${retries})`);
+    try {
+      const res = await fetch(url, options);
+      if (!res.ok && retries > 0) {
+        console.warn(`Fetch failed for ${url} with status ${res.status}. Retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return fetchWithRetry(url, options, retries - 1);
+      }
+      return res;
+    } catch (err) {
+      if (retries > 0) {
+        console.warn(`Fetch error for ${url}: ${err}. Retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return fetchWithRetry(url, options, retries - 1);
+      }
+      throw err;
+    }
+  };
+
   const fetchDevices = async () => {
     try {
-      const res = await fetch('/api/devices');
+      const res = await fetchWithRetry('/api/devices');
       if (res.ok) {
         const data = await res.json();
         setAllDevices(data);
@@ -100,13 +120,13 @@ export default function App() {
 
   const fetchDevicesWithLocations = async () => {
     try {
-      const res = await fetch('/api/devices-with-locations');
+      const res = await fetchWithRetry('/api/devices-with-locations');
       if (res.ok) {
         const data = await res.json();
         setDevicesWithLocations(data);
       }
     } catch (err) {
-      console.error("Failed to fetch devices with locations");
+      console.error("Failed to fetch devices with locations", err);
     }
   };
 
